@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { leadIdempotencyKey } from "./idempotency";
+import { leadFollowupSourceKey, leadIdempotencyKey, leadIdFromSourceKey } from "./idempotency";
 import { MockCrm } from "./providers/crm";
 
 const lead = { phone: "(512) 555-0100", email: "Ann@Example.com", zip: "78727", message: "Leaking sink" };
@@ -32,5 +32,17 @@ describe("MockCrm.createCustomer", () => {
     await crm.createCustomer(customer, "key-a");
     await crm.createCustomer(customer, "key-b");
     expect(crm.count()).toBe(2);
+  });
+});
+
+describe("lead follow-up source keys", () => {
+  it("round-trips the lead ID, so approving a draft can update its lead", () => {
+    const leadId = "3f2b8c1e-9a4d-4e7f-8b21-0c6d5e4f3a2b";
+    expect(leadIdFromSourceKey(leadFollowupSourceKey(leadId))).toBe(leadId);
+  });
+
+  it("returns null for other drafts and drafts without a key", () => {
+    expect(leadIdFromSourceKey("winback_sub_00003")).toBeNull();
+    expect(leadIdFromSourceKey(null)).toBeNull();
   });
 });

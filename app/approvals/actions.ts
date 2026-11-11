@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import { approvalQueue, branches, leads } from "@/db/schema";
 import { checkSms } from "@/lib/guardrails";
+import { leadIdFromSourceKey } from "@/lib/idempotency";
 import { scheduleSms } from "@/lib/sms";
 
 export type DecisionState = { error?: string; errors?: string[] };
@@ -42,7 +43,9 @@ export async function decide(_prev: DecisionState, form: FormData): Promise<Deci
   const check = checkSms(text, { approvedOffers: row.approvedOffers ?? [] });
   if (!check.passed) return { error: "The message still fails guardrails:", errors: check.errors };
 
-  const toPhone = row.item.toPhone ?? (await phoneForOlderLeadDraft(row.item.customerId));
+  // A lead follow-up draft belongs to a lead, whose follow-up status must follow the decision.
+  const lead = row.item.kind === "lead_followup_sms" ? await leadForDraft(row.item) : null;
+  const toPhone = row.item.toPhone ?? lead?.phone;
   if (!toPhone) return { error: "No phone number on file for this customer." };
 
   const [approved] = await db
@@ -59,15 +62,29 @@ export async function decide(_prev: DecisionState, form: FormData): Promise<Deci
   if (!approved) return { error: "Someone already decided on this draft." };
 
   await scheduleSms(
-    { sourceKey: `approval_${id}`, kind: approved.kind, toPhone, body: text, branchId: approved.branchId, approvalId: id },
+    {
+      sourceKey: `approval_${id}`,
+      kind: approved.kind,
+      toPhone,
+      body: text,
+      branchId: approved.branchId,
+      approvalId: id,
+      leadId: lead?.id,
+    },
     now,
   );
+  if (lead) await db.update(leads).set({ followupStatus: "sent", followupSms: text }).where(eq(leads.id, lead.id));
   revalidatePath("/approvals");
   return {};
 }
 
-// Drafts queued before Phase 4 didn't store the phone; find it on the lead instead.
-async function phoneForOlderLeadDraft(crmCustomerId: string): Promise<string | null> {
-  const [lead] = await db.select({ phone: leads.phone }).from(leads).where(eq(leads.crmCustomerId, crmCustomerId));
-  return lead?.phone ?? null;
+/**
+ * The lead a follow-up draft was written for. Drafts carry it in their source key
+ * ("lead_sms_<leadId>"); drafts queued before Phase 4 have no key, so match on the CRM customer.
+ */
+async function leadForDraft(item: { sourceKey: string | null; customerId: string }) {
+  const leadId = leadIdFromSourceKey(item.sourceKey);
+  const where = leadId ? eq(leads.id, leadId) : eq(leads.crmCustomerId, item.customerId);
+  const [lead] = await db.select({ id: leads.id, phone: leads.phone }).from(leads).where(where);
+  return lead ?? null;
 }

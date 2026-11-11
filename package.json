@@ -11,10 +11,12 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx db/migrate.ts",
     "db:seed": "tsx db/seed.ts",
+    "db:seed:history": "tsx db/seed-history.ts",
     "test": "vitest run",
     "webhook:send": "tsx scripts/send-mock-webhook.ts",
     "winback:run": "tsx scripts/run-winback.ts",
-    "sms:send-due": "tsx scripts/send-due-sms.ts"
+    "sms:send-due": "tsx scripts/send-due-sms.ts",
+    "pipeline:run": "tsx scripts/run-pipeline.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.102",
@@ -29,6 +31,7 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.5.13",
     "@tailwindcss/postcss": "^4.3.5",
     "@types/node": "^26.6.6",
     "@types/react": "^19.3.0",

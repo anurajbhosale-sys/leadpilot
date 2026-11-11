@@ -96,9 +96,16 @@ Requirements: Node.js 20+, Docker.
    npm run winback:run
    npm run sms:send-due   # sends follow-up SMS that were held until business hours
    ```
-8. **Run tests**
+8. **Load reporting history and run the nightly pipeline**, then open http://localhost:3000/dashboard
+   ```bash
+   npm run db:seed:history   # 90 days of leads, calls, bookings, subscriptions (safe to rerun)
+   npm run pipeline:run      # extract -> raw_* -> stg_* -> mart_* -> quality checks; exits 1 if the run failed
+   ```
+   In production, `POST /api/cron/pipeline` with `Authorization: Bearer $CRON_SECRET` runs the same job. Metric definitions are in [docs/METRICS.md](docs/METRICS.md).
+9. **Run tests**
    ```bash
    npm test
    ```
+   Pipeline tests run against PGlite (Postgres in-process), so they need no database.
 
 After changing `db/schema.ts`, run `npm run db:generate` to create a new migration.

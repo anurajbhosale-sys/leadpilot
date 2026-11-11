@@ -4,7 +4,7 @@ import { approvalQueue, branches, leads, smsMessages } from "@/db/schema";
 import { draftLeadSms } from "@/lib/ai/draft";
 import { extractLead } from "@/lib/ai/extract";
 import { findBranchByZip, normalizeZip } from "@/lib/branches";
-import { leadIdempotencyKey } from "@/lib/idempotency";
+import { leadFollowupSourceKey, leadIdempotencyKey } from "@/lib/idempotency";
 import { getCrm } from "@/lib/providers/crm";
 import { DEFAULT_BUSINESS_HOURS, DEFAULT_TIME_ZONE, nextSendTime } from "@/lib/quiet-hours";
 import { scheduleSms } from "@/lib/sms";
@@ -129,7 +129,7 @@ async function draftFollowUp(leadId: string): Promise<void> {
       .insert(approvalQueue)
       .values({
         kind: "lead_followup_sms",
-        sourceKey: `lead_sms_${lead.id}`,
+        sourceKey: leadFollowupSourceKey(lead.id),
         branchId: lead.branchId,
         customerId: lead.crmCustomerId ?? lead.id,
         toPhone: lead.phone,

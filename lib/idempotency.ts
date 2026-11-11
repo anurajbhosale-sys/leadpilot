@@ -15,6 +15,15 @@ export function leadIdempotencyKey(input: { phone?: string; email?: string; zip:
   return "lead_" + createHash("sha256").update(parts.join("|")).digest("hex").slice(0, 32);
 }
 
+/** Approval-queue source key for a lead's follow-up SMS draft: one draft per lead. */
+export const leadFollowupSourceKey = (leadId: string) => `lead_sms_${leadId}`;
+
+/** The lead ID inside a follow-up draft's source key, or null if it isn't one. */
+export function leadIdFromSourceKey(sourceKey: string | null): string | null {
+  const match = sourceKey?.match(/^lead_sms_([0-9a-f-]{36})$/i);
+  return match ? match[1] : null;
+}
+
 /**
  * Records which external events we've handled (processed_events).
  * claim() is atomic: only the first caller for a given event gets true.

@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   boolean,
   integer,
@@ -153,15 +154,22 @@ export const watermarks = pgTable("watermarks", {
 
 export const runStatus = pgEnum("run_status", ["running", "succeeded", "failed"]);
 
-export const pipelineRuns = pgTable("pipeline_runs", {
-  id: serial("id").primaryKey(),
-  status: runStatus("status").notNull().default("running"),
-  startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
-  finishedAt: timestamp("finished_at", { withTimezone: true }),
-  rowCounts: jsonb("row_counts").$type<Record<string, number>>(),
-  checkResults: jsonb("check_results").$type<{ name: string; passed: boolean; detail?: string }[]>(),
-  error: text("error"),
-});
+export type CheckResult = { name: string; passed: boolean; detail?: string };
+
+export const pipelineRuns = pgTable(
+  "pipeline_runs",
+  {
+    id: serial("id").primaryKey(),
+    status: runStatus("status").notNull().default("running"),
+    startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+    rowCounts: jsonb("row_counts").$type<Record<string, number>>(),
+    checkResults: jsonb("check_results").$type<CheckResult[]>(),
+    error: text("error"),
+  },
+  // At most one run in progress: a second concurrent run fails to insert instead of racing.
+  (t) => [uniqueIndex("pipeline_runs_one_running_idx").on(t.status).where(sql`${t.status} = 'running'`)],
+);
 
 export const evalRuns = pgTable("eval_runs", {
   id: serial("id").primaryKey(),
@@ -174,3 +182,5 @@ export const evalRuns = pgTable("eval_runs", {
   costUsd: numeric("cost_usd", { precision: 10, scale: 6 }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+export * from "./pipeline-schema";
