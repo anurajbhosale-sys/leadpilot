@@ -2,6 +2,7 @@ import { anthropic } from "@ai-sdk/anthropic";
 import { openai } from "@ai-sdk/openai";
 import { generateText, Output } from "ai";
 import type { z } from "zod";
+import { logAiCall } from "@/lib/logging";
 
 export type LlmMode = "anthropic" | "openai" | "mock";
 
@@ -29,58 +30,63 @@ function modelFor(mode: Exclude<LlmMode, "mock">) {
 
 export type StructuredRequest<T> = {
   task: string; // short name for logs, e.g. "extract_lead"
+  promptVersion: string;
   schema: z.ZodType<T>;
   system: string;
   prompt: string;
-  // Deterministic fake answer used in mock mode. Same prompt in, same object out.
-  mock: (prompt: string) => T;
+  // Deterministic fake answer used in mock mode. Same input in, same object out.
+  mock: () => T;
+  // Extra checks on the parsed object (e.g. guardrails). Errors mark the logged call as failed.
+  validate?: (object: T) => string[];
 };
 
 export type StructuredResult<T> = {
   object: T;
-  task: string;
   model: string;
   mocked: boolean;
-  inputTokens: number | undefined;
-  outputTokens: number | undefined;
-  latencyMs: number;
+  errors: string[]; // from `validate`; empty means passed
 };
 
 /**
  * Ask the LLM for JSON that matches `schema`. The result is always validated by Zod,
- * in mock mode too, so callers can trust the shape either way.
+ * in mock mode too, so callers can trust the shape either way. Every call is logged to ai_logs.
  */
 export async function generateStructured<T>(req: StructuredRequest<T>): Promise<StructuredResult<T>> {
   const mode = llmMode();
+  const model = mode === "mock" ? null : modelFor(mode);
+  const modelName = model?.modelId ?? "mock";
   const started = Date.now();
+  const log = { task: req.task, model: modelName, mocked: !model, promptVersion: req.promptVersion };
 
-  if (mode === "mock") {
-    return {
-      object: req.schema.parse(req.mock(req.prompt)),
-      task: req.task,
-      model: "mock",
-      mocked: true,
-      inputTokens: 0,
-      outputTokens: 0,
+  try {
+    let raw: unknown;
+    let usage: { inputTokens?: number; outputTokens?: number } = { inputTokens: 0, outputTokens: 0 };
+
+    if (!model) {
+      raw = req.mock();
+    } else {
+      const result = await generateText({
+        model,
+        system: req.system,
+        prompt: req.prompt,
+        output: Output.object({ schema: req.schema }),
+      });
+      raw = result.output;
+      usage = result.usage;
+    }
+
+    const object = req.schema.parse(raw);
+    const errors = req.validate?.(object) ?? [];
+    await logAiCall({
+      ...log,
+      ...usage,
       latencyMs: Date.now() - started,
-    };
+      passed: errors.length === 0,
+      error: errors.length ? errors.join("; ") : undefined,
+    });
+    return { object, model: modelName, mocked: !model, errors };
+  } catch (err) {
+    await logAiCall({ ...log, latencyMs: Date.now() - started, passed: false, error: String(err) });
+    throw err;
   }
-
-  const model = modelFor(mode);
-  const result = await generateText({
-    model,
-    system: req.system,
-    prompt: req.prompt,
-    output: Output.object({ schema: req.schema }),
-  });
-
-  return {
-    object: req.schema.parse(result.output),
-    task: req.task,
-    model: model.modelId,
-    mocked: false,
-    inputTokens: result.usage.inputTokens,
-    outputTokens: result.usage.outputTokens,
-    latencyMs: Date.now() - started,
-  };
 }

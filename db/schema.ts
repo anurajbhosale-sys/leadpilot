@@ -23,6 +23,8 @@ export const branches = pgTable("branches", {
   timeZone: text("time_zone").notNull(), // IANA zone, e.g. "America/Chicago"
   zipCodes: text("zip_codes").array().notNull(),
   businessHours: jsonb("business_hours").$type<BusinessHours>().notNull(),
+  // Exact offer wording an SMS may quote. Anything else price-like is blocked by guardrails.
+  approvedOffers: text("approved_offers").array().notNull().default([]),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -47,6 +49,9 @@ export const leads = pgTable("leads", {
   utmContent: text("utm_content"),
   gclid: text("gclid"),
   crmCustomerId: text("crm_customer_id"),
+  // Follow-up SMS draft: "ready" passed guardrails; "needs_review" went to the approval queue
+  followupSms: text("followup_sms"),
+  followupStatus: text("followup_status"),
   // Same key on a retry means "same lead", so the CRM never gets duplicates
   idempotencyKey: text("idempotency_key").notNull().unique(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

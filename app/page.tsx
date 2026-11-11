@@ -1,21 +1,24 @@
-import { llmMode } from "@/lib/ai/client";
+import { LeadForm, type Attribution } from "./lead-form";
 
-// Placeholder home page for Phase 1. The smart lead form replaces this in a later phase.
-export default function Home() {
+type SearchParams = Promise<Record<string, string | string[] | undefined>>;
+
+const first = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
+
+// Attribution comes from the landing URL, e.g. /?utm_source=google&utm_medium=cpc&gclid=abc
+export default async function Home({ searchParams }: { searchParams: SearchParams }) {
+  const params = await searchParams;
+  const attribution: Attribution = {
+    utmSource: first(params.utm_source),
+    utmMedium: first(params.utm_medium),
+    utmCampaign: first(params.utm_campaign),
+    gclid: first(params.gclid),
+  };
+
   return (
-    <main className="mx-auto max-w-2xl px-6 py-16">
-      <h1 className="text-3xl font-semibold">LeadPilot</h1>
-      <p className="mt-2 text-slate-600">
-        AI lead, call &amp; attribution platform for multi-location service businesses.
-      </p>
-      <div className="mt-8 rounded-lg border border-slate-200 bg-white p-4 text-sm">
-        <p>
-          <span className="font-medium">Status:</span> Phase 1 (foundation)
-        </p>
-        <p>
-          <span className="font-medium">LLM mode:</span> {llmMode()}
-        </p>
-      </div>
+    <main className="mx-auto max-w-xl px-6 py-12">
+      <h1 className="text-3xl font-semibold">How can we help?</h1>
+      <p className="mt-2 text-slate-600">Tell us what you need and the nearest branch will get back to you.</p>
+      <LeadForm attribution={attribution} />
     </main>
   );
 }

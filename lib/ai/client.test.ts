@@ -1,6 +1,9 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { generateStructured, llmMode } from "./client";
+import { logAiCall } from "@/lib/logging";
+
+vi.mock("@/lib/logging", () => ({ logAiCall: vi.fn() }));
 
 describe("llmMode", () => {
   it("uses mock mode when no API key is set", () => {
@@ -18,29 +21,37 @@ describe("llmMode", () => {
 });
 
 describe("generateStructured in mock mode", () => {
+  beforeEach(() => {
+    vi.stubEnv("LLM_MOCK", "true");
+    vi.mocked(logAiCall).mockClear();
+  });
   afterEach(() => vi.unstubAllEnvs());
 
   const schema = z.object({ urgency: z.enum(["low", "high"]) });
   const request = {
     task: "test",
+    promptVersion: "test@1",
     schema,
     system: "Classify urgency.",
-    mock: (prompt: string) => ({ urgency: prompt.includes("leak") ? ("high" as const) : ("low" as const) }),
+    prompt: "water leak under sink",
+    mock: () => ({ urgency: "high" as const }),
   };
 
-  it("returns the deterministic mock answer", async () => {
-    vi.stubEnv("LLM_MOCK", "true");
-    const a = await generateStructured({ ...request, prompt: "water leak under sink" });
-    const b = await generateStructured({ ...request, prompt: "water leak under sink" });
-    expect(a.object).toEqual({ urgency: "high" });
-    expect(b.object).toEqual(a.object);
-    expect(a.mocked).toBe(true);
-    expect(a.model).toBe("mock");
+  it("returns the mock answer and logs a passed call", async () => {
+    const result = await generateStructured(request);
+    expect(result).toMatchObject({ object: { urgency: "high" }, mocked: true, model: "mock", errors: [] });
+    expect(logAiCall).toHaveBeenCalledWith(expect.objectContaining({ task: "test", model: "mock", passed: true }));
   });
 
-  it("validates mock output against the schema", async () => {
-    vi.stubEnv("LLM_MOCK", "true");
-    const bad = { ...request, prompt: "x", mock: () => ({ urgency: "someday" }) as never };
+  it("logs a failed call when validate returns errors", async () => {
+    const result = await generateStructured({ ...request, validate: () => ["too urgent"] });
+    expect(result.errors).toEqual(["too urgent"]);
+    expect(logAiCall).toHaveBeenCalledWith(expect.objectContaining({ passed: false, error: "too urgent" }));
+  });
+
+  it("rejects mock output that doesn't match the schema, and logs it", async () => {
+    const bad = { ...request, mock: () => ({ urgency: "someday" }) as never };
     await expect(generateStructured(bad)).rejects.toThrow();
+    expect(logAiCall).toHaveBeenCalledWith(expect.objectContaining({ passed: false }));
   });
 });
