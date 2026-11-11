@@ -1,11 +1,13 @@
 // CRM integration sits behind this interface, so a real CRM (FieldRoutes, HubSpot, ...)
 // can replace the mock without touching business logic.
 
+import { normalizePhone } from "@/lib/phone";
+
 export type NewCustomer = {
   name: string;
   phone?: string;
   email?: string;
-  zip: string;
+  zip?: string;
   branchId: number | null;
 };
 
@@ -25,6 +27,13 @@ export interface CrmProvider {
   listCancellations(since: Date, cursor?: string): Promise<Page<Cancellation>>;
 }
 
+// Existing customers the mock CRM starts with, so sample calls have someone to match.
+export const SEED_CUSTOMERS: NewCustomer[] = [
+  { name: "Maria Gonzalez", phone: "(512) 555-0142", zip: "78727", branchId: 1 },
+  { name: "James Carter", phone: "303-555-0188", zip: "80202", branchId: 2 },
+  { name: "Priya Patel", phone: "813.555.0123", zip: "33609", branchId: 3 },
+];
+
 /** In-memory CRM for local development and tests. Data resets when the server restarts. */
 export class MockCrm implements CrmProvider {
   private customers = new Map<string, CrmCustomer>();
@@ -32,20 +41,32 @@ export class MockCrm implements CrmProvider {
   private notes = new Map<string, string[]>();
   private nextId = 1;
 
+  constructor(seed: NewCustomer[] = []) {
+    for (const c of seed) this.insert(c);
+  }
+
+  private insert(input: NewCustomer): CrmCustomer {
+    const customer: CrmCustomer = { ...input, id: `cus_${String(this.nextId++).padStart(5, "0")}`, createdAt: new Date() };
+    this.customers.set(customer.id, customer);
+    return customer;
+  }
+
   async createCustomer(input: NewCustomer, idempotencyKey: string): Promise<CrmCustomer> {
     // Seen this key before? Return the customer we already created.
     const existingId = this.byIdempotencyKey.get(idempotencyKey);
     if (existingId) return this.customers.get(existingId)!;
 
-    const customer: CrmCustomer = { ...input, id: `cus_${String(this.nextId++).padStart(5, "0")}`, createdAt: new Date() };
-    this.customers.set(customer.id, customer);
+    const customer = this.insert(input);
     this.byIdempotencyKey.set(idempotencyKey, customer.id);
     return customer;
   }
 
   async searchCustomers(query: CustomerQuery): Promise<CrmCustomer[]> {
+    // Like most CRMs, phone search ignores formatting
+    const phone = normalizePhone(query.phone);
+    const email = query.email?.trim().toLowerCase();
     return [...this.customers.values()].filter(
-      (c) => (query.phone && c.phone === query.phone) || (query.email && c.email === query.email),
+      (c) => (phone && normalizePhone(c.phone) === phone) || (email && c.email?.toLowerCase() === email),
     );
   }
 
@@ -58,9 +79,13 @@ export class MockCrm implements CrmProvider {
     return { items: [] }; // subscriptions arrive in a later phase
   }
 
-  /** Test/debug helper: how many customers exist. */
+  /** Test/debug helpers */
   count(): number {
     return this.customers.size;
+  }
+
+  notesFor(customerId: string): string[] {
+    return this.notes.get(customerId) ?? [];
   }
 }
 
@@ -68,6 +93,6 @@ export class MockCrm implements CrmProvider {
 const globalForCrm = globalThis as unknown as { leadpilotCrm?: CrmProvider };
 
 export function getCrm(): CrmProvider {
-  globalForCrm.leadpilotCrm ??= new MockCrm();
+  globalForCrm.leadpilotCrm ??= new MockCrm(SEED_CUSTOMERS);
   return globalForCrm.leadpilotCrm;
 }

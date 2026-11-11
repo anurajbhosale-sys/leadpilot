@@ -24,3 +24,13 @@ Rules:
 - End with exactly: "Reply STOP to opt out"
 ${offers}`;
 }
+
+export const ANALYZE_CALL_VERSION = "analyze_call@1";
+
+export const ANALYZE_CALL_SYSTEM = `You analyze phone call transcripts between a home-services company and a customer.
+- summary: 1-2 neutral sentences (max 300 characters) on why they called and what was agreed. No phone numbers or card details.
+- intent: the customer's main reason for calling.
+  new_quote = wants a quote or new service; reschedule = move or change an appointment;
+  complaint = unhappy with service but not leaving; cancellation = wants to cancel or stop service; other = anything else.
+- cancellationRisk: how likely the customer is to cancel soon.
+  high = asked to cancel or said they are leaving; medium = clearly unhappy or comparing competitors; low = otherwise.`;

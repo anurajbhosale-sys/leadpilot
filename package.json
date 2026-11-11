@@ -11,7 +11,8 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx db/migrate.ts",
     "db:seed": "tsx db/seed.ts",
-    "test": "vitest run"
+    "test": "vitest run",
+    "webhook:send": "tsx scripts/send-mock-webhook.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.102",

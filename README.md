@@ -72,7 +72,7 @@ Requirements: Node.js 20+, Docker.
    ```bash
    cp .env.example .env
    ```
-   Set `DATABASE_URL=postgres://leadpilot:leadpilot@localhost:5432/leadpilot`. API keys are optional: with neither `ANTHROPIC_API_KEY` nor `OPENAI_API_KEY` set, LeadPilot runs in mock LLM mode.
+   Set `DATABASE_URL=postgres://leadpilot:leadpilot@localhost:5432/leadpilot`. Set `WEBHOOK_SECRET` to any random string (e.g. `openssl rand -hex 32`). API keys are optional: with neither `ANTHROPIC_API_KEY` nor `OPENAI_API_KEY` set, LeadPilot runs in mock LLM mode.
 3. **Start PostgreSQL**
    ```bash
    docker compose up -d
@@ -87,7 +87,11 @@ Requirements: Node.js 20+, Docker.
    ```bash
    npm run dev
    ```
-6. **Run tests**
+6. **Send sample contact-center calls** (with the app running), then open http://localhost:3000/calls
+   ```bash
+   npm run webhook:send -- --all
+   ```
+7. **Run tests**
    ```bash
    npm test
    ```

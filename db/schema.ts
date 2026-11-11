@@ -30,6 +30,7 @@ export const branches = pgTable("branches", {
 
 export const leads = pgTable("leads", {
   id: uuid("id").primaryKey().defaultRandom(),
+  source: text("source").notNull().default("web"), // "web" (lead form) or "phone" (unknown caller)
   branchId: integer("branch_id").references(() => branches.id),
   name: text("name"),
   phone: text("phone"),
@@ -54,6 +55,25 @@ export const leads = pgTable("leads", {
   followupStatus: text("followup_status"),
   // Same key on a retry means "same lead", so the CRM never gets duplicates
   idempotencyKey: text("idempotency_key").notNull().unique(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// One row per analyzed call from the contact center.
+export const calls = pgTable("calls", {
+  id: serial("id").primaryKey(),
+  callId: text("call_id").notNull().unique(), // the contact center's ID
+  phone: text("phone").notNull(), // normalized, 10 digits
+  branchId: integer("branch_id").references(() => branches.id),
+  transcript: text("transcript").notNull(),
+  summary: text("summary").notNull(),
+  intent: text("intent").notNull(),
+  cancellationRisk: text("cancellation_risk").notNull(),
+  crmCustomerId: text("crm_customer_id").notNull(),
+  matchedExistingCustomer: boolean("matched_existing_customer").notNull(),
+  leadId: uuid("lead_id").references(() => leads.id), // set when an unknown caller became a lead
+  // High cancellation risk: the retention team should call this customer back
+  retentionFlag: boolean("retention_flag").notNull().default(false),
+  endedAt: timestamp("ended_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

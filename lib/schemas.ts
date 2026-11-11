@@ -44,3 +44,14 @@ export type LeadExtraction = z.infer<typeof leadExtractionSchema>;
 export const smsDraftSchema = z.object({
   message: z.string().min(1),
 });
+
+export const callIntents = ["new_quote", "reschedule", "complaint", "cancellation", "other"] as const;
+
+// What the LLM pulls out of a call transcript.
+export const callAnalysisSchema = z.object({
+  summary: z.string().min(1).max(300),
+  intent: z.enum(callIntents),
+  cancellationRisk: z.enum(["low", "medium", "high"]),
+});
+
+export type CallAnalysis = z.infer<typeof callAnalysisSchema>;

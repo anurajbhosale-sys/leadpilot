@@ -6,7 +6,7 @@ import { extractLead } from "@/lib/ai/extract";
 import { findBranchByZip, normalizeZip } from "@/lib/branches";
 import { leadIdempotencyKey } from "@/lib/idempotency";
 import { getCrm } from "@/lib/providers/crm";
-import type { LeadFormInput } from "@/lib/schemas";
+import { leadExtractionSchema, type LeadFormInput } from "@/lib/schemas";
 
 export type LeadResult = {
   leadId: string;
@@ -23,6 +23,7 @@ export type LeadResult = {
 /**
  * The smart lead form flow:
  * 1. Idempotency check: a resubmitted lead returns the original, with no new AI calls or CRM writes.
+ *    Exception: if its follow-up SMS was never drafted (e.g. the LLM call failed), the draft is retried.
  * 2. ZIP -> branch (unknown ZIP: branch is null, the lead is still saved).
  * 3. LLM extraction into validated JSON.
  * 4. Create the CRM customer with the idempotency key.
@@ -33,7 +34,13 @@ export async function submitLead(input: LeadFormInput): Promise<LeadResult> {
   const idempotencyKey = leadIdempotencyKey(input);
 
   const existing = await findLeadByKey(idempotencyKey);
-  if (existing) return { ...existing, duplicate: true };
+  if (existing) {
+    if (!existing.followUp.status) {
+      await draftFollowUp(existing.leadId);
+      return { ...(await findLeadByKey(idempotencyKey))!, duplicate: true };
+    }
+    return { ...existing, duplicate: true };
+  }
 
   const zip = normalizeZip(input.zip);
   const branch = await findBranchByZip(zip);
@@ -71,9 +78,33 @@ export async function submitLead(input: LeadFormInput): Promise<LeadResult> {
   // Lost a race with an identical concurrent submit: return the lead that won.
   if (!lead) return { ...(await findLeadByKey(idempotencyKey))!, duplicate: true };
 
+  await draftFollowUp(lead.id);
+
+  return { ...(await findLeadByKey(idempotencyKey))!, duplicate: false };
+}
+
+/**
+ * Draft the follow-up SMS for a saved web lead and record the outcome on the lead.
+ * Drafts that fail guardrails twice go to the approval queue.
+ */
+async function draftFollowUp(leadId: string): Promise<void> {
+  const [row] = await db
+    .select({ lead: leads, branch: branches })
+    .from(leads)
+    .leftJoin(branches, eq(leads.branchId, branches.id))
+    .where(eq(leads.id, leadId));
+  const { lead, branch } = row;
+
+  const extraction = leadExtractionSchema.parse({
+    serviceCategory: lead.serviceCategory,
+    urgency: lead.urgency,
+    contactPreference: lead.preferredContact,
+    summary: lead.summary,
+  });
+
   const draft = await draftLeadSms({
-    firstName: input.name.split(/\s+/)[0],
-    message: input.message,
+    firstName: (lead.name ?? "there").split(/\s+/)[0],
+    message: lead.message,
     extraction,
     branchName: branch?.name ?? "LeadPilot",
     approvedOffers: branch?.approvedOffers ?? [],
@@ -82,14 +113,12 @@ export async function submitLead(input: LeadFormInput): Promise<LeadResult> {
   if (draft.status === "needs_review") {
     await db.insert(approvalQueue).values({
       kind: "lead_followup_sms",
-      branchId: branch?.id ?? null,
-      customerId: customer.id,
+      branchId: lead.branchId,
+      customerId: lead.crmCustomerId ?? lead.id,
       draft: draft.sms,
     });
   }
   await db.update(leads).set({ followupSms: draft.sms, followupStatus: draft.status }).where(eq(leads.id, lead.id));
-
-  return { ...(await findLeadByKey(idempotencyKey))!, duplicate: false };
 }
 
 async function findLeadByKey(key: string): Promise<Omit<LeadResult, "duplicate"> | null> {
