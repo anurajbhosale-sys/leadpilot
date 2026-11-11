@@ -2,7 +2,7 @@ import { analyzeCall } from "@/lib/ai/analyze-call";
 import { processCallEnded } from "@/lib/calls";
 import { dbCallStore } from "@/lib/calls-store";
 import { dbEventLedger } from "@/lib/idempotency";
-import { callEndedEventSchema, getCallProvider, SIGNATURE_HEADER } from "@/lib/providers/calls";
+import { callEndedEventSchema, getCallProvider, SIGNATURE_HEADER, TIMESTAMP_HEADER } from "@/lib/providers/calls";
 import { getCrm } from "@/lib/providers/crm";
 
 // POST /api/webhooks/calls: the contact center calls this when a call ends.
@@ -12,11 +12,14 @@ export async function POST(request: Request) {
     return Response.json({ error: "Webhook not configured" }, { status: 500 });
   }
 
-  // Verify the signature against the raw body before trusting anything in it.
+  // Verify the signature (and that the event is recent) before trusting anything in the body.
   const rawBody = await request.text();
-  if (!getCallProvider().verifyWebhook(rawBody, request.headers.get(SIGNATURE_HEADER))) {
-    return Response.json({ error: "Invalid signature" }, { status: 401 });
-  }
+  const verification = getCallProvider().verifyWebhook({
+    rawBody,
+    signature: request.headers.get(SIGNATURE_HEADER),
+    timestamp: request.headers.get(TIMESTAMP_HEADER),
+  });
+  if (!verification.ok) return Response.json({ error: verification.error }, { status: 401 });
 
   let json: unknown;
   try {

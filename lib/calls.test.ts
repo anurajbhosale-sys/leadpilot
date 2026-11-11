@@ -72,6 +72,18 @@ describe("processCallEnded", () => {
     expect((await processCallEnded(event(), deps)).status).toBe("processed");
   });
 
+  it("doesn't add a second CRM note when a retry follows a failure after the note was written", async () => {
+    // The CRM saved the note but the response was lost (timeout), so we see an error and the sender retries.
+    const realAddNote = crm.addNote.bind(crm);
+    vi.spyOn(crm, "addNote").mockImplementationOnce(async (...args) => {
+      await realAddNote(...args);
+      throw new Error("CRM timeout");
+    });
+    await expect(processCallEnded(event(), deps)).rejects.toThrow("CRM timeout");
+    expect((await processCallEnded(event(), deps)).status).toBe("processed");
+    expect(crm.notesFor("cus_00001")).toHaveLength(1);
+  });
+
   it("writes the analysis as a note on the matched customer", async () => {
     const outcome = await processCallEnded(event(), deps);
     if (outcome.status !== "processed") throw new Error("expected processed");

@@ -94,14 +94,37 @@ export const approvalStatus = pgEnum("approval_status", ["pending", "approved", 
 // Customer-facing drafts wait here until a person approves, edits, or rejects them.
 export const approvalQueue = pgTable("approval_queue", {
   id: serial("id").primaryKey(),
-  kind: text("kind").notNull(), // e.g. "winback_sms"
+  kind: text("kind").notNull(), // "lead_followup_sms" or "winback_sms"
+  // What this draft is for, e.g. "winback_sub_00003". Unique, so reruns never queue it twice.
+  sourceKey: text("source_key").unique(),
   branchId: integer("branch_id").references(() => branches.id),
   customerId: text("customer_id").notNull(),
+  toPhone: text("to_phone"),
   draft: text("draft").notNull(),
+  guardrailErrors: text("guardrail_errors").array().notNull().default([]), // why it needs a closer look
   finalText: text("final_text"), // set when a reviewer edits the draft
   status: approvalStatus("status").notNull().default("pending"),
   reviewedBy: text("reviewed_by"),
   reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+  sentAt: timestamp("sent_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const smsStatus = pgEnum("sms_status", ["scheduled", "sent"]);
+
+// Outbox for customer SMS. Nothing is really sent: "sent" means we logged it.
+export const smsMessages = pgTable("sms_messages", {
+  id: serial("id").primaryKey(),
+  sourceKey: text("source_key").notNull().unique(), // e.g. "lead_followup_<leadId>"; one message per source
+  kind: text("kind").notNull(),
+  toPhone: text("to_phone").notNull(),
+  body: text("body").notNull(),
+  branchId: integer("branch_id").references(() => branches.id),
+  leadId: uuid("lead_id").references(() => leads.id),
+  approvalId: integer("approval_id").references(() => approvalQueue.id),
+  status: smsStatus("status").notNull().default("scheduled"),
+  sendAt: timestamp("send_at", { withTimezone: true }).notNull(), // held until business hours
+  sentAt: timestamp("sent_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

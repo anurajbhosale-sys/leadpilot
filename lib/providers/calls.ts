@@ -3,29 +3,52 @@ import { z } from "zod";
 
 // The contact center sits behind this interface, so a real one (Talkdesk, ...) can replace the mock.
 export interface CallProvider {
-  verifyWebhook(rawBody: string, signature: string | null): boolean;
+  verifyWebhook(req: WebhookRequest, now?: Date): WebhookVerification;
 }
 
-// Header carrying the signature: "sha256=<hex HMAC of the raw request body>"
-export const SIGNATURE_HEADER = "x-leadpilot-signature";
+export type WebhookRequest = {
+  rawBody: string;
+  signature: string | null; // "sha256=<hex>"
+  timestamp: string | null; // unix seconds, as sent by the contact center
+};
 
-export function signPayload(rawBody: string, secret: string): string {
-  return "sha256=" + createHmac("sha256", secret).update(rawBody).digest("hex");
+export type WebhookVerification = { ok: true } | { ok: false; error: string };
+
+export const SIGNATURE_HEADER = "x-leadpilot-signature";
+export const TIMESTAMP_HEADER = "x-leadpilot-timestamp";
+
+// Events signed longer ago than this are rejected, so a captured request can't be replayed later.
+export const MAX_EVENT_AGE_SECONDS = 5 * 60;
+
+/** HMAC-SHA256 over "<timestamp>.<raw body>": changing either one breaks the signature. */
+export function signPayload(rawBody: string, timestamp: number | string, secret: string): string {
+  return "sha256=" + createHmac("sha256", secret).update(`${timestamp}.${rawBody}`).digest("hex");
 }
 
 /**
- * Mock contact center. Signs webhooks with HMAC-SHA256 over the exact raw body, so we must
- * verify against the raw text before parsing JSON (re-serializing could change the bytes).
+ * Mock contact center. We verify against the exact raw body before parsing JSON,
+ * because re-serializing could change the bytes and break the signature.
  */
 export class MockContactCenter implements CallProvider {
   constructor(private secret: string) {}
 
-  verifyWebhook(rawBody: string, signature: string | null): boolean {
-    if (!this.secret || !signature) return false;
-    const expected = Buffer.from(signPayload(rawBody, this.secret));
+  verifyWebhook({ rawBody, signature, timestamp }: WebhookRequest, now = new Date()): WebhookVerification {
+    if (!this.secret || !signature || !timestamp) return { ok: false, error: "Missing signature or timestamp" };
+
+    const expected = Buffer.from(signPayload(rawBody, timestamp, this.secret));
     const actual = Buffer.from(signature);
     // Constant-time compare so the response time doesn't leak how much of the signature matched
-    return expected.length === actual.length && timingSafeEqual(expected, actual);
+    if (expected.length !== actual.length || !timingSafeEqual(expected, actual)) {
+      return { ok: false, error: "Invalid signature" };
+    }
+
+    // Checked after the signature, so an attacker can't learn anything from the timestamp check.
+    const sentAt = Number(timestamp);
+    const ageSeconds = now.getTime() / 1000 - sentAt;
+    if (!Number.isFinite(sentAt) || Math.abs(ageSeconds) > MAX_EVENT_AGE_SECONDS) {
+      return { ok: false, error: "Timestamp outside the allowed window" };
+    }
+    return { ok: true };
   }
 }
 

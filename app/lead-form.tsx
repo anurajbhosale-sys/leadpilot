@@ -18,7 +18,7 @@ type LeadResponse = {
   contactPreference: string | null;
   summary: string | null;
   crmCustomerId: string | null;
-  followUp: { status: string | null; sms: string | null };
+  followUp: { status: string | null; sms: string | null; sendAt: string | null; sentAt: string | null };
 };
 
 const inputClass =
@@ -91,6 +91,15 @@ export function LeadForm({ attribution }: { attribution: Attribution }) {
   );
 }
 
+function followUpLabel(f: LeadResponse["followUp"]): string {
+  const at = (iso: string) => new Date(iso).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" });
+  if (f.status === "needs_review") return "failed guardrails: sent to the approval queue";
+  if (f.status === "no_phone") return "not sent (no phone number)";
+  if (f.sentAt) return `sent ${at(f.sentAt)}`;
+  if (f.sendAt) return `outside business hours: scheduled for ${at(f.sendAt)}`;
+  return f.status ?? "-";
+}
+
 function Field({
   label,
   name,
@@ -118,7 +127,7 @@ function ResultCard({ result, attribution }: { result: LeadResponse; attribution
     ["Summary", result.summary ?? "-"],
     ["CRM customer", result.crmCustomerId ?? "-"],
     ["Attribution", Object.entries(attribution).filter(([, v]) => v).map(([k, v]) => `${k}=${v}`).join(", ") || "none"],
-    ["Follow-up SMS status", result.followUp.status === "needs_review" ? "sent to approval queue" : (result.followUp.status ?? "-")],
+    ["Follow-up SMS", followUpLabel(result.followUp)],
   ];
   return (
     <section className="mt-8 rounded-lg border border-slate-200 bg-white p-4 text-sm">

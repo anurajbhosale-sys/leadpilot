@@ -5,9 +5,10 @@
 //   npm run webhook:send -- --all                # send all five
 //   npm run webhook:send -- --call-id test-1     # fixed callId: run twice to see "duplicate"
 //   npm run webhook:send -- --bad-signature      # wrong signature: expect 401
+//   npm run webhook:send -- --stale              # signed 10 minutes ago (a replay): expect 401
 import "dotenv/config";
 import { parseArgs } from "node:util";
-import { signPayload, SIGNATURE_HEADER } from "@/lib/providers/calls";
+import { signPayload, SIGNATURE_HEADER, TIMESTAMP_HEADER } from "@/lib/providers/calls";
 
 // Phones for samples 1, 2 and 4 match the mock CRM's seeded customers (in different formats on purpose).
 const SAMPLES = [
@@ -65,6 +66,7 @@ const { values } = parseArgs({
     all: { type: "boolean", default: false },
     "call-id": { type: "string" },
     "bad-signature": { type: "boolean", default: false },
+    stale: { type: "boolean", default: false },
     url: { type: "string", default: process.env.APP_URL ?? "http://localhost:3000" },
   },
 });
@@ -92,11 +94,16 @@ for (const sample of toSend) {
     endedAt: new Date().toISOString(),
   };
   const body = JSON.stringify(event);
-  const signature = values["bad-signature"] ? signPayload(body, "wrong-secret") : signPayload(body, secret);
+  const timestamp = Math.floor(Date.now() / 1000) - (values.stale ? 10 * 60 : 0);
+  const signature = signPayload(body, timestamp, values["bad-signature"] ? "wrong-secret" : secret);
 
   const res = await fetch(`${values.url}/api/webhooks/calls`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", [SIGNATURE_HEADER]: signature },
+    headers: {
+      "Content-Type": "application/json",
+      [SIGNATURE_HEADER]: signature,
+      [TIMESTAMP_HEADER]: String(timestamp),
+    },
     body,
   }).catch(() => {
     console.error(`Could not reach ${values.url}. Is \`npm run dev\` running? (Use --url to point elsewhere.)`);

@@ -12,7 +12,9 @@
     "db:migrate": "tsx db/migrate.ts",
     "db:seed": "tsx db/seed.ts",
     "test": "vitest run",
-    "webhook:send": "tsx scripts/send-mock-webhook.ts"
+    "webhook:send": "tsx scripts/send-mock-webhook.ts",
+    "winback:run": "tsx scripts/run-winback.ts",
+    "sms:send-due": "tsx scripts/send-due-sms.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.102",

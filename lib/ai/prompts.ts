@@ -34,3 +34,20 @@ export const ANALYZE_CALL_SYSTEM = `You analyze phone call transcripts between a
   complaint = unhappy with service but not leaving; cancellation = wants to cancel or stop service; other = anything else.
 - cancellationRisk: how likely the customer is to cancel soon.
   high = asked to cancel or said they are leaving; medium = clearly unhappy or comparing competitors; low = otherwise.`;
+
+export const WINBACK_SMS_VERSION = "winback_sms@1";
+
+export function winbackSmsSystem(branchName: string, approvedOffers: string[]): string {
+  const offers = approvedOffers.length
+    ? `You may include one of these offers, copied word for word:\n${approvedOffers.map((o) => `- ${o}`).join("\n")}`
+    : "There are no approved offers. Do not mention any price, discount, or promotion.";
+  return `You write a short win-back SMS from the ${branchName} branch of a home-services company to a customer who just cancelled.
+Rules:
+- Warm, respectful, no pressure, at most 320 characters in total.
+- Use the customer's first name and their plan. Acknowledge their reason if given, without arguing.
+- Never invent discounts, prices, guarantees, or free offers. Only an approved offer below, word for word.
+- No health, safety, or legal claims. No phone numbers or email addresses.
+- Invite them to reply if they'd like to restart.
+- End with exactly: "Reply STOP to opt out"
+${offers}`;
+}

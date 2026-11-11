@@ -59,7 +59,8 @@ export async function findCustomerByPhone(crm: CrmProvider, phone: string): Prom
  * 1. Claim the callId in processed_events. Already claimed = a repeat delivery: do nothing.
  * 2. Analyze the transcript with the LLM.
  * 3. Match the caller to a CRM customer by phone. Unknown caller: create a customer and a phone lead.
- * 4. Save the call (with a retention flag for high cancellation risk) and write the note to the CRM.
+ * 4. Save the call (with a retention flag for high cancellation risk) and write the note to the CRM
+ *    (idempotent per callId, so a retry never adds a second note).
  * If any step fails, the claim is released so the contact center's retry can process it again.
  */
 export async function processCallEnded(event: CallEndedEvent, deps: CallDeps): Promise<CallOutcome> {
@@ -93,7 +94,8 @@ export async function processCallEnded(event: CallEndedEvent, deps: CallDeps): P
       endedAt: event.endedAt ? new Date(event.endedAt) : null,
     };
     await store.saveCall(record);
-    await crm.addNote(customer.id, formatCallNote(event.callId, analysis));
+    // Keyed by callId: if a retry gets here again, the CRM keeps the note it already has.
+    await crm.addNote(customer.id, formatCallNote(event.callId, analysis), `call_note_${event.callId}`);
     return { status: "processed", callId: event.callId, record };
   } catch (err) {
     await ledger.release("calls", event.callId);

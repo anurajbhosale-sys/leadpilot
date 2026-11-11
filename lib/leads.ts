@@ -1,11 +1,13 @@
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { approvalQueue, branches, leads } from "@/db/schema";
+import { approvalQueue, branches, leads, smsMessages } from "@/db/schema";
 import { draftLeadSms } from "@/lib/ai/draft";
 import { extractLead } from "@/lib/ai/extract";
 import { findBranchByZip, normalizeZip } from "@/lib/branches";
 import { leadIdempotencyKey } from "@/lib/idempotency";
 import { getCrm } from "@/lib/providers/crm";
+import { DEFAULT_BUSINESS_HOURS, DEFAULT_TIME_ZONE, nextSendTime } from "@/lib/quiet-hours";
+import { scheduleSms } from "@/lib/sms";
 import { leadExtractionSchema, type LeadFormInput } from "@/lib/schemas";
 
 export type LeadResult = {
@@ -17,7 +19,12 @@ export type LeadResult = {
   contactPreference: string | null;
   summary: string | null;
   crmCustomerId: string | null;
-  followUp: { status: string | null; sms: string | null };
+  followUp: {
+    status: string | null; // "ready" | "needs_review" | "no_phone"
+    sms: string | null;
+    sendAt: Date | null; // when a "ready" SMS goes out (held outside business hours)
+    sentAt: Date | null;
+  };
 };
 
 /**
@@ -29,6 +36,7 @@ export type LeadResult = {
  * 4. Create the CRM customer with the idempotency key.
  * 5. Save the lead.
  * 6. Draft the follow-up SMS with guardrails; drafts that fail twice go to the approval queue.
+ * 7. Send a "ready" SMS now during the branch's business hours, otherwise hold it until it opens (A3).
  */
 export async function submitLead(input: LeadFormInput): Promise<LeadResult> {
   const idempotencyKey = leadIdempotencyKey(input);
@@ -85,7 +93,7 @@ export async function submitLead(input: LeadFormInput): Promise<LeadResult> {
 
 /**
  * Draft the follow-up SMS for a saved web lead and record the outcome on the lead.
- * Drafts that fail guardrails twice go to the approval queue.
+ * Drafts that fail guardrails twice go to the approval queue; drafts that pass are scheduled.
  */
 async function draftFollowUp(leadId: string): Promise<void> {
   const [row] = await db
@@ -94,6 +102,12 @@ async function draftFollowUp(leadId: string): Promise<void> {
     .leftJoin(branches, eq(leads.branchId, branches.id))
     .where(eq(leads.id, leadId));
   const { lead, branch } = row;
+
+  // Email-only lead: nothing to text, so don't spend an LLM call drafting one.
+  if (!lead.phone) {
+    await db.update(leads).set({ followupStatus: "no_phone" }).where(eq(leads.id, lead.id));
+    return;
+  }
 
   const extraction = leadExtractionSchema.parse({
     serviceCategory: lead.serviceCategory,
@@ -111,21 +125,45 @@ async function draftFollowUp(leadId: string): Promise<void> {
   });
 
   if (draft.status === "needs_review") {
-    await db.insert(approvalQueue).values({
-      kind: "lead_followup_sms",
-      branchId: lead.branchId,
-      customerId: lead.crmCustomerId ?? lead.id,
-      draft: draft.sms,
-    });
+    await db
+      .insert(approvalQueue)
+      .values({
+        kind: "lead_followup_sms",
+        sourceKey: `lead_sms_${lead.id}`,
+        branchId: lead.branchId,
+        customerId: lead.crmCustomerId ?? lead.id,
+        toPhone: lead.phone,
+        draft: draft.sms,
+        guardrailErrors: draft.errors,
+      })
+      .onConflictDoNothing({ target: approvalQueue.sourceKey });
+  } else {
+    const sendAt = nextSendTime(
+      new Date(),
+      branch?.businessHours ?? DEFAULT_BUSINESS_HOURS,
+      branch?.timeZone ?? DEFAULT_TIME_ZONE,
+    );
+    await scheduleSms(
+      {
+        sourceKey: `lead_followup_${lead.id}`,
+        kind: "lead_followup_sms",
+        toPhone: lead.phone,
+        body: draft.sms,
+        branchId: lead.branchId,
+        leadId: lead.id,
+      },
+      sendAt,
+    );
   }
   await db.update(leads).set({ followupSms: draft.sms, followupStatus: draft.status }).where(eq(leads.id, lead.id));
 }
 
 async function findLeadByKey(key: string): Promise<Omit<LeadResult, "duplicate"> | null> {
   const [row] = await db
-    .select({ lead: leads, branchName: branches.name })
+    .select({ lead: leads, branchName: branches.name, sms: smsMessages })
     .from(leads)
     .leftJoin(branches, eq(leads.branchId, branches.id))
+    .leftJoin(smsMessages, eq(smsMessages.leadId, leads.id))
     .where(eq(leads.idempotencyKey, key));
   if (!row) return null;
 
@@ -138,6 +176,11 @@ async function findLeadByKey(key: string): Promise<Omit<LeadResult, "duplicate">
     contactPreference: lead.preferredContact,
     summary: lead.summary,
     crmCustomerId: lead.crmCustomerId,
-    followUp: { status: lead.followupStatus, sms: lead.followupSms },
+    followUp: {
+      status: lead.followupStatus,
+      sms: lead.followupSms,
+      sendAt: row.sms?.sendAt ?? null,
+      sentAt: row.sms?.sentAt ?? null,
+    },
   };
 }
