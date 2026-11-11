@@ -33,8 +33,17 @@ export async function decide(_prev: DecisionState, form: FormData): Promise<Deci
   // Only update while still pending, so two reviewers can't both decide.
   const stillPending = and(eq(approvalQueue.id, id), eq(approvalQueue.status, "pending"));
 
+  // A lead follow-up draft belongs to a lead, whose follow-up status must follow the decision.
+  const lead = row.item.kind === "lead_followup_sms" ? await leadForDraft(row.item) : null;
+
   if (decision === "reject") {
-    await db.update(approvalQueue).set({ status: "rejected", reviewedBy: reviewer, reviewedAt: now }).where(stillPending);
+    const [rejected] = await db
+      .update(approvalQueue)
+      .set({ status: "rejected", reviewedBy: reviewer, reviewedAt: now })
+      .where(stillPending)
+      .returning({ id: approvalQueue.id });
+    if (!rejected) return { error: "Someone already decided on this draft." };
+    if (lead) await db.update(leads).set({ followupStatus: "rejected" }).where(eq(leads.id, lead.id));
     revalidatePath("/approvals");
     return {};
   }
@@ -43,8 +52,6 @@ export async function decide(_prev: DecisionState, form: FormData): Promise<Deci
   const check = checkSms(text, { approvedOffers: row.approvedOffers ?? [] });
   if (!check.passed) return { error: "The message still fails guardrails:", errors: check.errors };
 
-  // A lead follow-up draft belongs to a lead, whose follow-up status must follow the decision.
-  const lead = row.item.kind === "lead_followup_sms" ? await leadForDraft(row.item) : null;
   const toPhone = row.item.toPhone ?? lead?.phone;
   if (!toPhone) return { error: "No phone number on file for this customer." };
 

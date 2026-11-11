@@ -1,4 +1,8 @@
 // Prompt text lives here so changes are easy to review and versioned in ai_logs / eval_runs.
+//
+// Bump a task's version whenever its prompt text changes, so eval runs on different prompts are
+// never compared as if they were the same. prompts.test.ts fingerprints each prompt and fails
+// if the text changes while the version stays the same.
 
 export const EXTRACT_LEAD_VERSION = "extract_lead@1";
 
@@ -51,3 +55,13 @@ Rules:
 - End with exactly: "Reply STOP to opt out"
 ${offers}`;
 }
+
+/** The current prompt version of every LLM task, recorded with each AI call and eval run. */
+export const PROMPT_VERSIONS = {
+  extract_lead: EXTRACT_LEAD_VERSION,
+  draft_lead_sms: LEAD_SMS_VERSION,
+  analyze_call: ANALYZE_CALL_VERSION,
+  draft_winback_sms: WINBACK_SMS_VERSION,
+} as const;
+
+export type AiTask = keyof typeof PROMPT_VERSIONS;

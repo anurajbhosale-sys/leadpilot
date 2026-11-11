@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import {
   boolean,
   integer,
+  index,
   jsonb,
   numeric,
   pgEnum,
@@ -51,7 +52,8 @@ export const leads = pgTable("leads", {
   utmContent: text("utm_content"),
   gclid: text("gclid"),
   crmCustomerId: text("crm_customer_id"),
-  // Follow-up SMS draft: "ready" passed guardrails; "needs_review" went to the approval queue
+  // Follow-up SMS draft: "ready" passed guardrails; "needs_review" went to the approval queue, where a
+  // reviewer makes it "sent" (approved) or "rejected"; "no_phone" means there was nobody to text
   followupSms: text("followup_sms"),
   followupStatus: text("followup_status"),
   // Same key on a retry means "same lead", so the CRM never gets duplicates
@@ -133,6 +135,7 @@ export const smsMessages = pgTable("sms_messages", {
 export const aiLogs = pgTable("ai_logs", {
   id: serial("id").primaryKey(),
   task: text("task").notNull(), // e.g. "extract_lead"
+  context: text("context").notNull().default("app"), // "app" (real traffic) or "eval" (eval runs)
   model: text("model").notNull(),
   mocked: boolean("mocked").notNull(),
   promptVersion: text("prompt_version"),
@@ -171,16 +174,31 @@ export const pipelineRuns = pgTable(
   (t) => [uniqueIndex("pipeline_runs_one_running_idx").on(t.status).where(sql`${t.status} = 'running'`)],
 );
 
-export const evalRuns = pgTable("eval_runs", {
-  id: serial("id").primaryKey(),
-  promptVersion: text("prompt_version").notNull(),
-  model: text("model").notNull(),
-  total: integer("total").notNull(),
-  passed: integer("passed").notNull(),
-  passRate: numeric("pass_rate", { precision: 5, scale: 4 }).notNull(),
-  perField: jsonb("per_field").$type<Record<string, number>>(), // accuracy per extracted field
-  costUsd: numeric("cost_usd", { precision: 10, scale: 6 }),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+// One row per eval suite per run of `npm run evals`. Rows from the same run share a batch_id.
+export const evalRuns = pgTable(
+  "eval_runs",
+  {
+    id: serial("id").primaryKey(),
+    batchId: text("batch_id").notNull(),
+    suite: text("suite").notNull(), // "extract_lead" | "analyze_call" | "draft_lead_sms"
+    promptVersion: text("prompt_version").notNull(),
+    model: text("model").notNull(),
+    mocked: boolean("mocked").notNull().default(false), // mock-mode results say nothing about model quality
+    total: integer("total").notNull(), // cases
+    passed: integer("passed").notNull(), // cases with every scored field right (or SMS that passed guardrails)
+    passRate: numeric("pass_rate", { precision: 5, scale: 4 }).notNull(),
+    perField: jsonb("per_field").$type<Record<string, number>>(), // accuracy per scored field
+    threshold: numeric("threshold", { precision: 5, scale: 4 }), // minimum accuracy required
+    meetsThreshold: boolean("meets_threshold").notNull().default(true),
+    costUsd: numeric("cost_usd", { precision: 10, scale: 6 }),
+    avgLatencyMs: integer("avg_latency_ms"),
+    p95LatencyMs: integer("p95_latency_ms"),
+    failures: jsonb("failures").$type<EvalFailure[]>(), // which cases got which field wrong
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("eval_runs_suite_created_idx").on(t.suite, t.createdAt)],
+);
+
+export type EvalFailure = { caseId: string; field: string; expected: string; actual: string };
 
 export * from "./pipeline-schema";

@@ -35,7 +35,7 @@ const sampleBranches = [
 ];
 
 for (const branch of sampleBranches) {
-  const { name, ...config } = branch;
+  const { name: _name, ...config } = branch; // name is the conflict key, not something to update
   await db.insert(branches).values(branch).onConflictDoUpdate({ target: branches.name, set: config });
 }
 

@@ -1,23 +1,29 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useState, useSyncExternalStore } from "react";
 import { decide, type DecisionState } from "./actions";
 
 const REVIEWER_KEY = "leadpilot.reviewer";
 
+const subscribeToNothing = () => () => {};
+function readSavedReviewer(): string {
+  try {
+    return localStorage.getItem(REVIEWER_KEY) ?? "";
+  } catch {
+    return "";
+  }
+}
+
 export function ReviewCard({ id, draft }: { id: number; draft: string }) {
   const [state, action, pending] = useActionState<DecisionState, FormData>(decide, {});
   const [text, setText] = useState(draft);
-  const [reviewer, setReviewer] = useState("");
-
-  // Remember the reviewer's name in this browser (a convenience only; it may be unavailable).
-  useEffect(() => {
-    try {
-      setReviewer(localStorage.getItem(REVIEWER_KEY) ?? "");
-    } catch {}
-  }, []);
+  // Remember the reviewer's name in this browser (a convenience only; storage may be unavailable).
+  // The saved name is read after hydration; what the reviewer types takes over from then on.
+  const savedReviewer = useSyncExternalStore(subscribeToNothing, readSavedReviewer, () => "");
+  const [typedReviewer, setTypedReviewer] = useState<string | null>(null);
+  const reviewer = typedReviewer ?? savedReviewer;
   const saveReviewer = (name: string) => {
-    setReviewer(name);
+    setTypedReviewer(name);
     try {
       localStorage.setItem(REVIEWER_KEY, name);
     } catch {}

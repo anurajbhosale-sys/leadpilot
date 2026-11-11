@@ -102,10 +102,18 @@ Requirements: Node.js 20+, Docker.
    npm run pipeline:run      # extract -> raw_* -> stg_* -> mart_* -> quality checks; exits 1 if the run failed
    ```
    In production, `POST /api/cron/pipeline` with `Authorization: Bearer $CRON_SECRET` runs the same job. Metric definitions are in [docs/METRICS.md](docs/METRICS.md).
-9. **Run tests**
+9. **Run the AI evals** (golden sets in `evals/`), then see "AI quality" on the dashboard
    ```bash
-   npm test
+   npm run evals                      # scores lead extraction, call analysis, SMS guardrails; saves to eval_runs
+   npm run evals -- --threshold 0.9   # exits 1 if any field's accuracy is below the threshold
    ```
-   Pipeline tests run against PGlite (Postgres in-process), so they need no database.
+   Without an API key this runs in mock mode: the scores come from keyword rules, are labeled as not meaningful, and the threshold is not enforced (add `--strict` to enforce it anyway).
+10. **Typecheck, lint, and test** (what CI runs on every push, in mock mode)
+    ```bash
+    npm run typecheck && npm run lint && npm test
+    ```
+    Database tests run against PGlite (Postgres in-process), so they need no database.
+
+TypeScript note: `tsc` is TypeScript 7 (`@typescript/native`), while the `typescript` package is the TypeScript 6 API (`@typescript/typescript6`), because ESLint's TypeScript support and Next's build still need that API. Bump a prompt's version in `lib/ai/prompts.ts` whenever you change its text; a test fails if you forget.
 
 After changing `db/schema.ts`, run `npm run db:generate` to create a new migration.

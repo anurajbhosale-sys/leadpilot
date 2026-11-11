@@ -4,6 +4,7 @@ import { db } from "@/db";
 import type { CheckResult } from "@/db/schema";
 import { queryRows } from "@/db/types";
 import { LEAD_CHANNELS } from "@/pipeline/transforms";
+import { AiQuality } from "./ai-quality";
 
 // Attribution & funnel reporting (SPEC Feature 4), read from the marts the nightly pipeline builds.
 // Every metric is defined in docs/METRICS.md.
@@ -32,13 +33,16 @@ type Totals = { spend: number; leads: number; bookings: number; revenue: number 
 
 export default async function DashboardPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const params = await searchParams; // reading searchParams makes this page render per request
+  // A server component renders once per request, so reading the clock here is safe: one value per page view.
+  // eslint-disable-next-line react-hooks/purity
+  const now = Date.now();
   const branches = await queryRows<{ id: number; name: string }>(db, sql`select id, name from branches order by id`);
   const branchId = branches.find((b) => String(b.id) === one(params.branch))?.id ?? null;
   const channel = CHANNELS.find((c) => c === one(params.channel)) ?? null;
   const days = RANGES.find((r) => String(r) === one(params.days)) ?? 30;
 
   // Complete days only: the range ends yesterday (UTC), when ad spend is final.
-  const end = new Date(Date.now() - 86_400_000);
+  const end = new Date(now - 86_400_000);
   const start = new Date(end.getTime() - (days - 1) * 86_400_000);
   const [from, to] = [isoDate(start), isoDate(end)];
 
@@ -128,7 +132,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         Ad spend to leads, bookings, revenue and retention, from the nightly pipeline. {from} to {to} (UTC, complete days).
       </p>
 
-      <DataHealth run={run} lastGood={lastGood?.finished_at ?? null} freshness={freshness} />
+      <DataHealth now={now} run={run} lastGood={lastGood?.finished_at ?? null} freshness={freshness} />
 
       <form className="mt-6 flex flex-wrap items-end gap-3 text-sm" method="get">
         <Select name="branch" label="Branch" value={branchId === null ? "" : String(branchId)} options={[["", "All branches"], ...branches.map((b) => [String(b.id), b.name] as [string, string])]} />
@@ -211,6 +215,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           </div>
         </>
       )}
+      <AiQuality />
+
       <p className="mt-10 text-xs text-slate-500">Metric definitions: docs/METRICS.md.</p>
     </main>
   );
@@ -218,13 +224,14 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
 
 const monthName = (month: string) => new Date(`${month}T00:00:00Z`).toLocaleString("en-US", { month: "short", year: "numeric", timeZone: "UTC" });
 
-function ago(iso: string | null) {
+function ago(iso: string | null, now: number) {
   if (!iso) return "never";
-  const hours = (Date.now() - new Date(iso).getTime()) / 3_600_000;
+  const hours = (now - new Date(iso).getTime()) / 3_600_000;
   return hours < 1 ? `${Math.max(1, Math.round(hours * 60))} min ago` : hours < 48 ? `${hours.toFixed(1)} h ago` : `${Math.round(hours / 24)} days ago`;
 }
 
 function DataHealth(p: {
+  now: number;
   run: { id: number; status: string; finished_at: string | null; started_at: string; check_results: CheckResult[] | null; error: string | null } | undefined;
   lastGood: string | null;
   freshness: { loaded: string | null; newest_lead: string | null; newest_spend: string | null };
@@ -238,7 +245,7 @@ function DataHealth(p: {
   }
   const checks = p.run.check_results ?? [];
   const failed = checks.filter((c) => !c.passed);
-  const stale = !p.freshness.loaded || Date.now() - new Date(p.freshness.loaded).getTime() > 26 * 3_600_000;
+  const stale = !p.freshness.loaded || p.now - new Date(p.freshness.loaded).getTime() > 26 * 3_600_000;
   const state =
     p.run.status === "failed"
       ? { icon: "✕", label: "Last run failed", box: "border-red-300 bg-red-50 text-red-900" }
@@ -255,10 +262,10 @@ function DataHealth(p: {
           <span aria-hidden>{state.icon}</span> {state.label}
         </strong>
         <span>
-          Run #{p.run.id} {p.run.status} {ago(p.run.finished_at ?? p.run.started_at)} · {checks.length - failed.length}/{checks.length} checks passed
+          Run #{p.run.id} {p.run.status} {ago(p.run.finished_at ?? p.run.started_at, p.now)} · {checks.length - failed.length}/{checks.length} checks passed
         </span>
-        <span>Data loaded {ago(p.freshness.loaded)}</span>
-        <span>Last successful run {ago(p.lastGood)}</span>
+        <span>Data loaded {ago(p.freshness.loaded, p.now)}</span>
+        <span>Last successful run {ago(p.lastGood, p.now)}</span>
         <span>
           Newest lead {p.freshness.newest_lead?.slice(0, 16) ?? "—"} · spend through {p.freshness.newest_spend ?? "—"}
         </span>

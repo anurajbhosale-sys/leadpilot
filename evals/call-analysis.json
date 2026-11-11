@@ -1,0 +1,125 @@
+{
+  "description": "Contact-center transcripts with the intent and cancellation risk a careful human would assign, per the definitions in lib/ai/prompts.ts. A list of values means any of them is correct.",
+  "cases": [
+    {
+      "id": "call-01-new-quote",
+      "note": "Straightforward quote request",
+      "transcript": "Agent: Thanks for calling, how can I help?\nCustomer: Hi, I'd like a quote for monthly pest control. We just bought a house.\nAgent: Happy to help, I'll get someone to call you with pricing.",
+      "expected": { "intent": "new_quote", "cancellationRisk": "low" }
+    },
+    {
+      "id": "call-02-reschedule",
+      "note": "Simple reschedule",
+      "transcript": "Agent: Good morning!\nCustomer: Hi, I have a lawn appointment Thursday, can we move it to Friday instead?\nAgent: Sure, Friday at 10 works.\nCustomer: Perfect, thanks.",
+      "expected": { "intent": "reschedule", "cancellationRisk": "low" }
+    },
+    {
+      "id": "call-03-angry-cancellation",
+      "note": "Angry, explicit cancellation",
+      "transcript": "Agent: How can I help today?\nCustomer: I want to cancel. Your tech tracked mud through my house and nobody called me back. I'm done.\nAgent: I'm so sorry. Can I have a manager call you?\nCustomer: No. Just cancel the plan today.",
+      "expected": { "intent": "cancellation", "cancellationRisk": "high" }
+    },
+    {
+      "id": "call-04-complaint-stays",
+      "note": "Unhappy but not leaving",
+      "transcript": "Agent: What can I do for you?\nCustomer: The ants came back two days after the treatment. I'm pretty disappointed.\nAgent: I'm sorry, we'll send someone back at no charge.\nCustomer: Okay, thank you, that works.",
+      "expected": { "intent": "complaint", "cancellationRisk": "medium" }
+    },
+    {
+      "id": "call-05-cancel-appointment-not-service",
+      "note": "Cancels one appointment but keeps the plan: this is a reschedule, not a cancellation",
+      "transcript": "Agent: Thanks for calling.\nCustomer: I need to cancel tomorrow's visit, I'll be out of town. Can we do next week?\nAgent: Of course, how about Tuesday?\nCustomer: Tuesday's great. Keep my plan as is.",
+      "expected": { "intent": "reschedule", "cancellationRisk": "low" }
+    },
+    {
+      "id": "call-06-competitor-shopping",
+      "note": "Not cancelling yet but comparing a cheaper competitor: medium risk",
+      "transcript": "Agent: How can I help?\nCustomer: Honestly, another company quoted me twenty dollars less a month. Is there anything you can do on price?\nAgent: Let me have someone from retention look into that for you.",
+      "expected": { "intent": ["other", "complaint"], "cancellationRisk": "medium" }
+    },
+    {
+      "id": "call-07-threat-to-cancel",
+      "note": "Complaint with a threat to leave if not fixed",
+      "transcript": "Agent: Hi, what's going on?\nCustomer: The AC tune-up last week didn't fix anything, it's still not cooling. If this isn't fixed by Friday I'm switching companies.\nAgent: Understood, I'll get a senior tech out tomorrow.",
+      "expected": { "intent": "complaint", "cancellationRisk": ["high", "medium"] }
+    },
+    {
+      "id": "call-08-billing-question",
+      "note": "Billing question, no dissatisfaction",
+      "transcript": "Agent: Billing department, how can I help?\nCustomer: I just want to update the card on file, my old one expired.\nAgent: No problem, I'll send you a secure link.",
+      "expected": { "intent": "other", "cancellationRisk": "low" }
+    },
+    {
+      "id": "call-09-moving-cancellation",
+      "note": "Polite cancellation because of a move",
+      "transcript": "Agent: Thanks for calling!\nCustomer: Hi, we're moving out of state next month, so we'll need to stop the lawn service after the last visit in June.\nAgent: Sorry to see you go, I'll set that up.",
+      "expected": { "intent": "cancellation", "cancellationRisk": "high" }
+    },
+    {
+      "id": "call-10-mixed-reschedule-complaint",
+      "note": "Mixed: reschedules, but the main point is the no-show complaint",
+      "transcript": "Agent: How can I help?\nCustomer: Nobody showed up yesterday for my appointment. I took the afternoon off work for nothing. I'm really frustrated.\nAgent: I'm so sorry. Can I reschedule you for Monday morning?\nCustomer: Fine, Monday.",
+      "expected": { "intent": ["complaint", "reschedule"], "cancellationRisk": "medium" }
+    },
+    {
+      "id": "call-11-add-service",
+      "note": "Existing customer adding a new service: new_quote",
+      "transcript": "Agent: Hi there!\nCustomer: We love the pest control. Do you also do lawn care? I'd like to add that if it's not too much.\nAgent: We do! I'll have someone send you an estimate.",
+      "expected": { "intent": "new_quote", "cancellationRisk": "low" }
+    },
+    {
+      "id": "call-12-agent-says-cancel",
+      "note": "The agent mentions cancellation policy; the customer only reschedules",
+      "transcript": "Agent: Just so you know, our cancellation policy requires 24 hours notice.\nCustomer: That's fine, I'm calling two days ahead. Can we push the appointment to next Wednesday?\nAgent: Done.",
+      "expected": { "intent": "reschedule", "cancellationRisk": "low" }
+    },
+    {
+      "id": "call-13-sarcastic-cancel",
+      "note": "Sarcastic, then clearly asks to stop service",
+      "transcript": "Agent: How was your service?\nCustomer: Oh, wonderful, if you like paying for roaches. Stop the service, I'm not paying another month for this.\nAgent: I understand. I'll process that.",
+      "expected": { "intent": "cancellation", "cancellationRisk": "high" }
+    },
+    {
+      "id": "call-14-wrong-number",
+      "note": "Wrong number",
+      "transcript": "Agent: Thanks for calling, how can I help?\nCustomer: Oh sorry, I was trying to reach the pharmacy. Wrong number.\nAgent: No problem, have a good day.",
+      "expected": { "intent": "other", "cancellationRisk": "low" }
+    },
+    {
+      "id": "call-15-discount-or-leave",
+      "note": "Demands a discount or will cancel: cancellation-risk high, main intent cancellation or complaint",
+      "transcript": "Agent: What can I help with?\nCustomer: The price went up again. Either you give me a discount or cancel my account, your choice.\nAgent: Let me see what I can do.",
+      "expected": { "intent": ["cancellation", "complaint"], "cancellationRisk": "high" }
+    },
+    {
+      "id": "call-16-happy-feedback",
+      "note": "Positive feedback only",
+      "transcript": "Agent: Hello!\nCustomer: I just wanted to say Marcus did a great job on the furnace yesterday. Very professional.\nAgent: That's wonderful to hear, I'll pass it on.",
+      "expected": { "intent": "other", "cancellationRisk": "low" }
+    },
+    {
+      "id": "call-17-pause-service",
+      "note": "Pausing for the winter, not cancelling",
+      "transcript": "Agent: How can I help?\nCustomer: Can we pause the lawn service for the winter and start again in March?\nAgent: Sure, I'll pause it until March 1st.\nCustomer: Great, thanks.",
+      "expected": { "intent": ["reschedule", "other"], "cancellationRisk": "low" }
+    },
+    {
+      "id": "call-18-angry-but-staying",
+      "note": "Very angry, but explicitly says they're not leaving",
+      "transcript": "Agent: What happened?\nCustomer: Your tech broke a sprinkler head and didn't tell me! I'm furious. I'm not cancelling, I've been with you for years, but I want it fixed.\nAgent: Absolutely, we'll replace it tomorrow at no cost.",
+      "expected": { "intent": "complaint", "cancellationRisk": "medium" }
+    },
+    {
+      "id": "call-19-quote-competitor",
+      "note": "New prospect mentions their current provider; low risk for us",
+      "transcript": "Agent: Thanks for calling.\nCustomer: I'm unhappy with my current pest company and want a quote from you for a quarterly plan.\nAgent: Great, I'll set up an estimate.",
+      "expected": { "intent": "new_quote", "cancellationRisk": "low" }
+    },
+    {
+      "id": "call-20-end-subscription-soft",
+      "note": "Soft cancellation wording without the word 'cancel'",
+      "transcript": "Agent: How can I help today?\nCustomer: I think we're going to stop after this month. We're going to try doing the lawn ourselves.\nAgent: Understood. Would a less frequent plan help?\nCustomer: No, we'll just end it, thanks.",
+      "expected": { "intent": "cancellation", "cancellationRisk": "high" }
+    }
+  ]
+}

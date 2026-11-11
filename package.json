@@ -8,6 +8,7 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx db/migrate.ts",
     "db:seed": "tsx db/seed.ts",
@@ -16,7 +17,8 @@
     "webhook:send": "tsx scripts/send-mock-webhook.ts",
     "winback:run": "tsx scripts/run-winback.ts",
     "sms:send-due": "tsx scripts/send-due-sms.ts",
-    "pipeline:run": "tsx scripts/run-pipeline.ts"
+    "pipeline:run": "tsx scripts/run-pipeline.ts",
+    "evals": "tsx scripts/run-evals.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.102",
@@ -36,10 +38,13 @@
     "@types/node": "^26.6.6",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "@typescript/native": "npm:typescript@7.0.2",
     "drizzle-kit": "^0.31.11",
+    "eslint": "10.13.0",
+    "eslint-config-next": "16.4.3",
     "tailwindcss": "^4.3.5",
     "tsx": "^4.23.15",
-    "typescript": "^7.0.2",
+    "typescript": "npm:@typescript/typescript6@6.0.2",
     "vitest": "^5.1.0"
   }
 }

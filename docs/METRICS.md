@@ -62,3 +62,18 @@ These run after every load. Any failure marks the run `failed`. The dashboard sh
 | Accepted values | Call `intent` and `cancellation_risk`, lead `channel`, subscription `status`, and spend `channel` only hold allowed values |
 | Volume | Yesterday's rows in `stg_leads`, `stg_calls`, and `stg_ad_spend` are within ±50% of the previous 7 days' daily average. The check is skipped when that average is below 5 rows/day |
 | Reconciliation | Active subscriptions in `stg_subscriptions` equal the CRM's own active count |
+
+## AI quality
+
+These come from `npm run evals` (stored in `eval_runs`) and from `ai_logs`. The scoring is in [`evals/score.ts`](../evals/score.ts).
+
+| Metric | Definition |
+|---|---|
+| Field accuracy | Share of golden cases where the model's value for that field matches the expected label. Matching ignores case and surrounding spaces. Ambiguous cases list several acceptable labels, and any of them counts. A failed model call counts as wrong on every field |
+| Eval pass rate | Share of golden cases where **every** scored field is right. Lead extraction scores category, urgency and contact preference. Call analysis scores intent and cancellation risk. Summaries are not scored |
+| SMS guardrail pass rate | Share of lead cases whose follow-up SMS draft passes guardrails without human review, allowing the one automatic retry. The draft is written from the case's *expected* extraction, so drafting is measured on its own |
+| Meets threshold | Every field accuracy in a suite is at least the threshold (default 0.8, `EVAL_MIN_ACCURACY`) |
+| AI cost | Sum of the estimated cost of logged calls: tokens × the price in `lib/ai/pricing.ts`. Models without a known price are left out, never guessed |
+| AI latency | Time per AI call, as average and 95th percentile (nearest rank) |
+
+Eval runs record the prompt version of each task, so runs on different prompts are never compared as if they were the same. Dashboard cost and latency cover real traffic only (`ai_logs.context = 'app'`); eval calls are tagged `eval` and reported with their run. Mock-mode results are labeled and don't measure model quality.

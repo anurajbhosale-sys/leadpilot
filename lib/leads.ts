@@ -20,7 +20,7 @@ export type LeadResult = {
   summary: string | null;
   crmCustomerId: string | null;
   followUp: {
-    status: string | null; // "ready" | "needs_review" | "no_phone"
+    status: string | null; // "ready" | "needs_review" | "sent" | "rejected" | "no_phone"
     sms: string | null;
     sendAt: Date | null; // when a "ready" SMS goes out (held outside business hours)
     sentAt: Date | null;
