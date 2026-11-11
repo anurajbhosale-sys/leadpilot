@@ -62,32 +62,34 @@ See [docs/SPEC.md](docs/SPEC.md) for the full specification.
 
 ## Getting started
 
-> Placeholder steps. These will be finalized as the project is built out.
+Requirements: Node.js 20+, Docker.
 
-1. **Clone the repo**
-   ```bash
-   git clone https://github.com/anurajbhosale-sys/leadpilot.git
-   cd leadpilot
-   ```
-2. **Install dependencies**
+1. **Install dependencies**
    ```bash
    npm install
    ```
-3. **Configure environment**
+2. **Configure environment**
    ```bash
    cp .env.example .env
    ```
-   Fill in the values. API keys are optional: without them, LeadPilot runs in mock LLM mode.
-4. **Start PostgreSQL**
+   Set `DATABASE_URL=postgres://leadpilot:leadpilot@localhost:5432/leadpilot`. API keys are optional: with neither `ANTHROPIC_API_KEY` nor `OPENAI_API_KEY` set, LeadPilot runs in mock LLM mode.
+3. **Start PostgreSQL**
    ```bash
    docker compose up -d
    ```
-5. **Run migrations and seed data**
+   If port 5432 is already in use, run `POSTGRES_PORT=5434 docker compose up -d` and use that port in `DATABASE_URL`.
+4. **Create tables and seed sample branches**
    ```bash
    npm run db:migrate
    npm run db:seed
    ```
-6. **Start the app**
+5. **Start the app** at http://localhost:3000
    ```bash
    npm run dev
    ```
+6. **Run tests**
+   ```bash
+   npm test
+   ```
+
+After changing `db/schema.ts`, run `npm run db:generate` to create a new migration.
