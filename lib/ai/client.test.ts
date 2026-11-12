@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
-import { generateStructured, llmMode } from "./client";
+import { DEFAULT_MODELS, generateStructured, llmMode } from "./client";
 import { logAiCall } from "@/lib/logging";
 
 vi.mock("@/lib/logging", () => ({ logAiCall: vi.fn() }));
@@ -17,6 +17,19 @@ describe("llmMode", () => {
 
   it("LLM_MOCK=true forces mock mode even with a key", () => {
     expect(llmMode({ LLM_MOCK: "true", ANTHROPIC_API_KEY: "a" })).toBe("mock");
+  });
+
+  it("DEMO_MODE=true forces mock mode even with a key, unless DEMO_LLM=true", () => {
+    expect(llmMode({ DEMO_MODE: "true", ANTHROPIC_API_KEY: "a" })).toBe("mock");
+    expect(llmMode({ DEMO_MODE: "true", DEMO_LLM: "false", OPENAI_API_KEY: "o" })).toBe("mock");
+    expect(llmMode({ DEMO_MODE: "true", DEMO_LLM: "true", ANTHROPIC_API_KEY: "a" })).toBe("anthropic");
+    expect(llmMode({ DEMO_LLM: "true" })).toBe("mock"); // still needs a key
+  });
+});
+
+describe("default models", () => {
+  it("defaults to Claude Haiku 5.5 (override with ANTHROPIC_MODEL)", () => {
+    expect(DEFAULT_MODELS.anthropic).toBe("claude-haiku-5-5");
   });
 });
 

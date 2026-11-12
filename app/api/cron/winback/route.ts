@@ -1,6 +1,13 @@
 import { cronAuthError } from "@/lib/cron";
 import { runWinbackJob } from "@/lib/winback-db";
 
+export const maxDuration = 300;
+
+// GET is how Vercel Cron calls it (vercel.json); POST is kept for manual and external schedulers.
+export async function GET(request: Request) {
+  return POST(request);
+}
+
 // POST /api/cron/winback: hourly win-back job (SPEC A2).
 export async function POST(request: Request) {
   const authError = cronAuthError(request);

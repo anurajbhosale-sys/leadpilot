@@ -7,6 +7,7 @@ import {
   numeric,
   pgEnum,
   pgTable,
+  primaryKey,
   serial,
   text,
   timestamp,
@@ -200,5 +201,17 @@ export const evalRuns = pgTable(
 );
 
 export type EvalFailure = { caseId: string; field: string; expected: string; actual: string };
+
+// Fixed-window request counters for the public routes (lib/rate-limit.ts). The key holds the
+// route name and a hash of the client IP, never the IP itself. Old windows are deleted as we go.
+export const rateLimits = pgTable(
+  "rate_limits",
+  {
+    key: text("key").notNull(),
+    windowStart: timestamp("window_start", { withTimezone: true }).notNull(),
+    hits: integer("hits").notNull().default(1),
+  },
+  (t) => [primaryKey({ columns: [t.key, t.windowStart] }), index("rate_limits_window_idx").on(t.windowStart)],
+);
 
 export * from "./pipeline-schema";

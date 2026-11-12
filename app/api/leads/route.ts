@@ -1,8 +1,13 @@
+import { db } from "@/db";
 import { submitLead } from "@/lib/leads";
+import { RATE_LIMITS, rateLimitResponse } from "@/lib/rate-limit";
 import { leadFormSchema } from "@/lib/schemas";
 
 // POST /api/leads: validate the form, then run the lead flow in lib/leads.ts.
 export async function POST(request: Request) {
+  const limited = await rateLimitResponse(db, request, RATE_LIMITS.leadForm);
+  if (limited) return limited;
+
   const body = await request.json().catch(() => null);
   const parsed = leadFormSchema.safeParse(body);
   if (!parsed.success) {

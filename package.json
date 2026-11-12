@@ -18,7 +18,8 @@
     "winback:run": "tsx scripts/run-winback.ts",
     "sms:send-due": "tsx scripts/send-due-sms.ts",
     "pipeline:run": "tsx scripts/run-pipeline.ts",
-    "evals": "tsx scripts/run-evals.ts"
+    "evals": "tsx scripts/run-evals.ts",
+    "setup": "tsx scripts/setup.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.102",

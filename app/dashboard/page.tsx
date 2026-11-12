@@ -186,7 +186,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             })}
           />
 
-          <div className="mt-10 grid gap-8 md:grid-cols-2">
+          <div className="mt-10 grid gap-10">
             <div>
               <h2 className="text-lg font-semibold">CAC by month (paid channels)</h2>
               <Table

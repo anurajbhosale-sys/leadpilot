@@ -43,6 +43,13 @@
       "when": 1794430575956,
       "tag": "0005_evals",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1794456240757,
+      "tag": "0006_rate_limits",
+      "breakpoints": true
     }
   ]
 }

@@ -1,9 +1,11 @@
+import { db } from "@/db";
 import { analyzeCall } from "@/lib/ai/analyze-call";
 import { processCallEnded } from "@/lib/calls";
 import { dbCallStore } from "@/lib/calls-store";
 import { dbEventLedger } from "@/lib/idempotency";
 import { callEndedEventSchema, getCallProvider, SIGNATURE_HEADER, TIMESTAMP_HEADER } from "@/lib/providers/calls";
 import { getCrm } from "@/lib/providers/crm";
+import { RATE_LIMITS, rateLimitResponse } from "@/lib/rate-limit";
 
 // POST /api/webhooks/calls: the contact center calls this when a call ends.
 export async function POST(request: Request) {
@@ -11,6 +13,9 @@ export async function POST(request: Request) {
     console.error("WEBHOOK_SECRET is not set; rejecting webhook.");
     return Response.json({ error: "Webhook not configured" }, { status: 500 });
   }
+  // Before the signature check, so a flood of bad signatures is capped too.
+  const limited = await rateLimitResponse(db, request, RATE_LIMITS.callWebhook);
+  if (limited) return limited;
 
   // Verify the signature (and that the event is recent) before trusting anything in the body.
   const rawBody = await request.text();
